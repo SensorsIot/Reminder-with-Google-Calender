@@ -9,7 +9,7 @@
 #include "HTTPSRedirect.h"
 
 // from LarryD, Arduino forum
-#define DEBUG   //If you comment this line, the DPRINT & DPRINTLN lines are defined as blank.
+// #define DEBUG   //If you comment this line, the DPRINT & DPRINTLN lines are defined as blank.
 #ifdef DEBUG    //Macros are usually in all capital letters.
   #define DPRINT(...)    Serial.print(__VA_ARGS__)     //DPRINT is a macro, debug print
   #define DPRINTLN(...)  Serial.println(__VA_ARGS__)   //DPRINTLN is a macro, debug print with new line
@@ -152,7 +152,7 @@ void HTTPSRedirect::fetchData(bool disp, bool header){
     line = readStringUntil('\n');
     
     if (disp){
-      Serial.println(line);  
+    //  Serial.println(line);  
       data += line + "|";   
     }
     if (line == "\r") {
