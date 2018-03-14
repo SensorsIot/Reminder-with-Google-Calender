@@ -3,6 +3,8 @@ function doGet(){
   return ContentService.createTextOutput(GetEvents());
 }
 
+// Replace XXX with your calendar name
+
 function GetEvents(){
   var _calendarName = 'XXXs_Duties'
   var Cal = CalendarApp.getCalendarsByName(_calendarName)[0];
