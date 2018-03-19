@@ -1,47 +1,47 @@
 /*  HTTPS with follow-redirect
- *  Created by Sujay S. Phadke, 2016
- *  All rights reserved.
- *  
- *  Modified by Daniel Willi, 2016
- *
- */
+    Created by Sujay S. Phadke, 2016
+    All rights reserved.
+
+    Modified by Daniel Willi, 2016
+
+*/
 
 #include "HTTPSRedirect.h"
 
 // from LarryD, Arduino forum
 // #define DEBUG   //If you comment this line, the DPRINT & DPRINTLN lines are defined as blank.
 #ifdef DEBUG    //Macros are usually in all capital letters.
-  #define DPRINT(...)    Serial.print(__VA_ARGS__)     //DPRINT is a macro, debug print
-  #define DPRINTLN(...)  Serial.println(__VA_ARGS__)   //DPRINTLN is a macro, debug print with new line
+#define DPRINT(...)    Serial.print(__VA_ARGS__)     //DPRINT is a macro, debug print
+#define DPRINTLN(...)  Serial.println(__VA_ARGS__)   //DPRINTLN is a macro, debug print with new line
 #else
-  #define DPRINT(...)     //now defines a blank line
-  #define DPRINTLN(...)   //now defines a blank line
+#define DPRINT(...)     //now defines a blank line
+#define DPRINTLN(...)   //now defines a blank line
 #endif
 
 String data;
 
-HTTPSRedirect::HTTPSRedirect(const int p, const char* fp, bool c) 
-    : httpsPort(p), redirFingerprint(fp), fpCheck(c){
+HTTPSRedirect::HTTPSRedirect(const int p, const char* fp, bool c)
+  : httpsPort(p), redirFingerprint(fp), fpCheck(c) {
 }
 
-HTTPSRedirect::HTTPSRedirect(const int p) 
-    : httpsPort(p){
-      fpCheck = false;
+HTTPSRedirect::HTTPSRedirect(const int p)
+  : httpsPort(p) {
+  fpCheck = false;
 }
 
-HTTPSRedirect::~HTTPSRedirect(){ 
+HTTPSRedirect::~HTTPSRedirect() {
 }
 
-String HTTPSRedirect::getData(String& url, const char* host, const char* redirHost){
+String HTTPSRedirect::getData(String& url, const char* host, const char* redirHost) {
   return getData(url.c_str(), host, redirHost);
 }
 
-String HTTPSRedirect::getData(const char* url, const char* host, const char* redirHost){
-  
+String HTTPSRedirect::getData(const char* url, const char* host, const char* redirHost) {
+
   int redirFlag = false;
 
   // Check if connection to host is alive
-  if (!connected()){
+  if (!connected()) {
     Serial.println("Error! Not connected to host.");
     return "error";
   }
@@ -55,21 +55,21 @@ String HTTPSRedirect::getData(const char* url, const char* host, const char* red
   print(Request);
   String line;
   String redirUrl;
-  
+
   DPRINTLN("Detecting re-direction.");
   DPRINTLN(redirHost);
-  
+
   while (connected()) {
     line = readStringUntil('\n');
     DPRINTLN(line);
     if (line == "\r") {
       DPRINTLN("END OF HEADER");
-      
+
       //DPRINTLN(line);
       break;
     }
-    
-    if (find("Location: ") ){
+
+    if (find("Location: ") ) {
       find((char *)redirHost);
       DPRINTLN("Found re-direction URL!");
       redirUrl = readStringUntil('\n');
@@ -77,20 +77,20 @@ String HTTPSRedirect::getData(const char* url, const char* host, const char* red
       break;
     }
     /*
-    if (finder.findUntil("chunked", "\n\r") ){
+      if (finder.findUntil("chunked", "\n\r") ){
       break;
-    }*/
+      }*/
   }
-  
+
   DPRINTLN("Body:\n");
-  if (verboseInfo){
+  if (verboseInfo) {
     fetchData(true, false);
   }
-    
+
   else
     flush();
-    
-  if (!redirFlag){
+
+  if (!redirFlag) {
     DPRINTLN("No re-direction URL found in header.");
     return "error";
   }
@@ -99,9 +99,9 @@ String HTTPSRedirect::getData(const char* url, const char* host, const char* red
 
   DPRINTLN("Redirected URL:");
   DPRINTLN(redirUrl);
-  
+
   Request = createRequest(redirUrl.c_str(), redirHost);
-                          
+
   DPRINTLN("Connecting to:");
   DPRINTLN(redirHost);
 
@@ -110,22 +110,22 @@ String HTTPSRedirect::getData(const char* url, const char* host, const char* red
     return "error";
   }
 
-  if (fpCheck){
+  if (fpCheck) {
     if (verify(redirFingerprint, redirHost)) {
       Serial.println("Re-directed host certificate match.");
     } else {
       Serial.println("Re-directed host certificate mis-match");
     }
   }
-  
+
   DPRINTLN("Requesting re-directed URL.");
   DPRINTLN(Request);
 
   // Make request
   print(Request);
-  
+
   DPRINTLN("Final Response:");
-  
+
   fetchData(false, true);
 
   fetchData(true, false);
@@ -136,36 +136,36 @@ String HTTPSRedirect::getData(const char* url, const char* host, const char* red
   return data;
 }
 
-String HTTPSRedirect::createRequest(const char* url, const char* host){
+String HTTPSRedirect::createRequest(const char* url, const char* host) {
   return String("GET ") + url + " HTTP/1.1\r\n" +
-                          "Host: " + host + "\r\n" +
-                          "User-Agent: ESP8266\r\n" +
-                          (keepAlive ? "" : "Connection: close") + 
-                          "\r\n\r\n";
-  
+         "Host: " + host + "\r\n" +
+         "User-Agent: ESP8266\r\n" +
+         (keepAlive ? "" : "Connection: close") +
+         "\r\n\r\n";
+
 }
 
-void HTTPSRedirect::fetchData(bool disp, bool header){
+void HTTPSRedirect::fetchData(bool disp, bool header) {
   String line;
   data = "";
   while (connected()) {
     line = readStringUntil('\n');
-    
-    if (disp){
-    //  Serial.println(line);  
-      data += line + "|";   
+
+    if (disp) {
+      //  Serial.println(line);
+      data += line + "|";
     }
     if (line == "\r") {
-      if (disp){
-        if (header){
+      if (disp) {
+        if (header) {
           DPRINTLN("END OF HEADER");
-        }         
-        else{
+        }
+        else {
           DPRINTLN("END OF RESPONSE");
           DPRINTLN(line);
-        }          
+        }
       }
-      data.remove(data.length()-3);
+      data.remove(data.length() - 3);
       //Serial.println("break");
       break;
     }

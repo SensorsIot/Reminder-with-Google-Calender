@@ -45,7 +45,7 @@ const char* host = "script.google.com";
 const char* googleRedirHost = "script.googleusercontent.com";
 const int httpsPort = 443;
 
-unsigned long entryCalender, entryPrintStatus, entryInterrupt;
+unsigned long entryCalender, entryPrintStatus, entryInterrupt, heartBeatEntry, heartBeatLedEntry;
 String url;
 
 
@@ -58,18 +58,22 @@ const char *GScriptIdRead = GoogleScriptIdRead;
 const char *GScriptIdWrite = GoogleScriptIdWrite;
 #else
 //Network credentials
-const char* ssid = "........."; //replace with you ssid
-const char* password = ".........."; //replace with your password
+const char* ssid = "............"; //replace with you ssid
+const char* password = "............"; //replace with your password
 //Google Script ID
 const char *GScriptIdRead = "............"; //replace with you gscript id for reading the calendar
 const char *GScriptIdWrite = "..........."; //replace with you gscript id for writing the calendar
 #endif
 
-#define NBR_EVENTS 1
-String  possibleEvents[NBR_EVENTS] = {"Laundry"};
-byte  LEDpins[NBR_EVENTS]    = {D2};
-byte  switchPins[NBR_EVENTS] = {D1};
+#define NBR_EVENTS 4
+
+
+String  possibleEvents[NBR_EVENTS] = {"Meal", "Laundry", "Telephone", "Shop"};
+byte  LEDpins[NBR_EVENTS]    = {D1, D2, D4, D8};
+byte  switchPins[NBR_EVENTS] = {D7, D3, D5, D6};
 bool switchPressed[NBR_EVENTS];
+boolean beat = false;
+int beatLED = 0;
 
 enum taskStatus {
   none,
@@ -87,12 +91,12 @@ void connectToWifi() {
   Serial.println();
   Serial.print("Connecting to wifi: ");
   Serial.println(ssid);
-
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
+
   Serial.println("");
   Serial.print("WiFi connected ");
   Serial.print("IP address: ");
@@ -104,28 +108,9 @@ void connectToWifi() {
   Serial.print("Connecting to ");
   Serial.println(host);
   bool flag = false;
-  for (int i = 0; i < 5; i++) {
-    int retval = client.connect(host, httpsPort);
-    if (retval == 1) {
-      flag = true;
-      break;
-    }
-    else  Serial.println("Connection failed. Retrying...");
-    if (!flag) {
-      Serial.print("Could not connect to server: ");
-      Serial.println(host);
-      Serial.println("Exiting...");
-      return;
-    }
-  }
+  int retries = 0;
+  while (!client.connect(host, httpsPort)) Serial.print(".");
   Serial.println("Connected to Google");
-}
-
-void setActivePins() {
-  for (int i = 0; i < NBR_EVENTS; i++) {
-    if (taskStatus[i] == due) digitalWrite(LEDpins[i], HIGH);
-    else digitalWrite(LEDpins[i], LOW);
-  }
 }
 
 void printStatus() {
@@ -139,17 +124,21 @@ void printStatus() {
 }
 
 void getCalendar() {
-  //  Serial.println("Start Request");
+  Serial.println("Start Calendar Request");
   HTTPSRedirect client(httpsPort);
-  if (!client.connected()) client.connect(host, httpsPort);
+  unsigned long getCalenderEntry = millis();
+  while (!client.connected() && millis() < getCalenderEntry + 8000) {
+    Serial.print(".");
+    client.connect(host, httpsPort);
+  }
 
   //Fetch Google Calendar events
   url = String("/macros/s/") + GScriptIdRead + "/exec";
+  yield();
   calendarData = client.getData(url, host, googleRedirHost);
   Serial.print("Calendar Data---> ");
   Serial.println(calendarData);
   calenderUpToDate = true;
-  yield();
 }
 
 void createEvent(String title) {
@@ -159,7 +148,6 @@ void createEvent(String title) {
   // Create event on Google Calendar
   url = String("/macros/s/") + GScriptIdWrite + "/exec" + "?title=" + title;
   client.getData(url, host, googleRedirHost);
-  //  Serial.println(url);
   Serial.println("Write Event created ");
   calenderUpToDate = false;
 }
@@ -169,6 +157,7 @@ void manageStatus() {
     switch (taskStatus[i]) {
       case none:
         if (switchPressed[i]) {
+          digitalWrite(LEDpins[i], HIGH);
           while (!calenderUpToDate) getCalendar();
           if (!eventHere(i)) createEvent(possibleEvents[i]);
           Serial.print(i);
@@ -177,6 +166,7 @@ void manageStatus() {
           taskStatus[i] = due;
         } else {
           if (eventHere(i)) {
+            digitalWrite(LEDpins[i], HIGH);
             Serial.print(i);
             Serial.println(" 0 -->1");
             taskStatus[i] = due;
@@ -185,6 +175,7 @@ void manageStatus() {
         break;
       case due:
         if (switchPressed[i]) {
+          digitalWrite(LEDpins[i], LOW);
           Serial.print(i);
           Serial.println(" 1 -->2");
           taskStatus[i] = done;
@@ -192,6 +183,7 @@ void manageStatus() {
         break;
       case done:
         if (calenderUpToDate && !eventHere(i)) {
+          digitalWrite(LEDpins[i], LOW);
           Serial.print(i);
           Serial.println(" 2 -->0");
           taskStatus[i] = none;
@@ -230,8 +222,6 @@ void handleInterrupt() {
 
 void setup() {
   Serial.begin(115200);
-
-  connectToWifi();
   for (int i = 0; i < NBR_EVENTS; i++) {
     pinMode(LEDpins[i], OUTPUT);
     taskStatus[i] = none;  // Reset all LEDs
@@ -239,6 +229,7 @@ void setup() {
     switchPressed[i] = false;
     attachInterrupt(digitalPinToInterrupt(switchPins[i]), handleInterrupt, FALLING);
   }
+  connectToWifi();
   getCalendar();
   entryCalender = millis();
 }
@@ -250,10 +241,36 @@ void loop() {
     entryCalender = millis();
   }
   manageStatus();
-  setActivePins();
   if (millis() > entryPrintStatus + 5000) {
     printStatus();
     entryPrintStatus = millis();
+  }
+  if (millis() > heartBeatEntry + 30000) {
+    beat = true;
+    heartBeatEntry = millis();
+  }
+  heartBeat();
+}
+
+void heartBeat() {
+  if (beat) {
+    if ( millis() > heartBeatLedEntry + 100) {
+      heartBeatLedEntry = millis();
+      if (beatLED < NBR_EVENTS) {
+
+        if (beatLED > 0) digitalWrite(LEDpins[beatLED - 1], LOW);
+        digitalWrite(LEDpins[beatLED], HIGH);
+        beatLED++;
+      }
+      else {
+        for (int i = 0; i < NBR_EVENTS; i++) {
+          if (taskStatus[i] == due) digitalWrite(LEDpins[i], HIGH);
+          else digitalWrite(LEDpins[i], LOW);
+        }
+        beatLED = 0;
+        beat = false;
+      }
+    }
   }
 }
 

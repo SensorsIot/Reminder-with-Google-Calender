@@ -46,7 +46,7 @@ const char* host = "script.google.com";
 const char* googleRedirHost = "script.googleusercontent.com";
 const int httpsPort = 443;
 
-unsigned long entryCalender, entryPrintStatus, entrySwitchPressed;
+unsigned long entryCalender, entryPrintStatus, entrySwitchPressed, heartBeatEntry, heartBeatLedEntry;
 String url;
 
 unsigned long intEntry;
@@ -74,6 +74,8 @@ String  possibleEvents[NBR_EVENTS] = {"Cat", "Paper", "Cardboard", "Green",  "La
 byte  LEDpins[NBR_EVENTS]    = {D0, D1, D2, D4, D5, D6, D7, D8};
 bool switchPressed[NBR_EVENTS];
 unsigned long switchOff = 0;
+boolean beat = false;
+int beatLED = 0;
 
 enum taskStatus {
   none,
@@ -119,17 +121,10 @@ void connectToWifi() {
       Serial.print("Could not connect to server: ");
       Serial.println(host);
       Serial.println("Exiting...");
-      return;
+      ESP.reset();
     }
   }
   Serial.println("Connected to Google");
-}
-
-void setActivePins() {
-  for (int i = 0; i < NBR_EVENTS; i++) {
-    if (taskStatus[i] == due) digitalWrite(LEDpins[i], HIGH);
-    else digitalWrite(LEDpins[i], LOW);
-  }
 }
 
 void printStatus() {
@@ -145,7 +140,11 @@ void printStatus() {
 void getCalendar() {
   //  Serial.println("Start Request");
   HTTPSRedirect client(httpsPort);
-  if (!client.connected()) client.connect(host, httpsPort);
+  unsigned long getCalenderEntry = millis();
+  while (!client.connected() && millis() < getCalenderEntry + 8000) {
+    Serial.print(".");
+    client.connect(host, httpsPort);
+  }
 
   //Fetch Google Calendar events
   url = String("/macros/s/") + GScriptIdRead + "/exec";
@@ -262,10 +261,37 @@ void loop() {
     entryCalender = millis();
   }
   manageStatus();
-  // setActivePins();
   if (millis() > entryPrintStatus + 5000) {
     printStatus();
     entryPrintStatus = millis();
+  }
+
+  if (millis() > heartBeatEntry + 30000) {
+    beat = true;
+    heartBeatEntry = millis();
+  }
+  heartBeat();
+}
+
+void heartBeat() {
+  if (beat) {
+    if ( millis() > heartBeatLedEntry + 100) {
+      heartBeatLedEntry = millis();
+      if (beatLED < NBR_EVENTS) {
+
+        if (beatLED > 0) digitalWrite(LEDpins[beatLED - 1], LOW);
+        digitalWrite(LEDpins[beatLED], HIGH);
+        beatLED++;
+      }
+      else {
+        for (int i = 0; i < NBR_EVENTS; i++) {
+          if (taskStatus[i] == due) digitalWrite(LEDpins[i], HIGH);
+          else digitalWrite(LEDpins[i], LOW);
+        }
+        beatLED = 0;
+        beat = false;
+      }
+    }
   }
 }
 
