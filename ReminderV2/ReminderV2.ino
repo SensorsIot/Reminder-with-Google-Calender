@@ -36,9 +36,7 @@
 
 #include <ESP8266WiFi.h>
 #include "HTTPSRedirect.h"
-//#include <credentials.h>
-
-
+#include <credentials.h>
 
 //Connection Settings
 const char* host = "script.google.com";
@@ -129,6 +127,7 @@ void getCalendar() {
   unsigned long getCalenderEntry = millis();
   while (!client.connected() && millis() < getCalenderEntry + 8000) {
     Serial.print(".");
+    yield();
     client.connect(host, httpsPort);
   }
 
