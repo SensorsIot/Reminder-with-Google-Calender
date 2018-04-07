@@ -37,7 +37,7 @@
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
 #include "HTTPSRedirect.h"
-#include <credentials.h>
+//#include <credentials.h>
 
 Ticker blinker;
 
@@ -69,7 +69,7 @@ const char *GScriptIdWrite = "..........."; //replace with you gscript id for wr
 #endif
 
 #define NBR_EVENTS 8
-String  possibleEvents[NBR_EVENTS] = {"Cat", "Paper", "Cardboard", "Green",  "Laundry", "Fitness", "Meal", "spare"};
+String  possibleEvents[NBR_EVENTS] = {"Cat", "Paper", "Cardboard", "Green",  "Laundry", "Fitness", "Meal", "XXX"};
 //String  possibleEvents[NBR_EVENTS] = {"Cat", "Paper", "Green", "Cardboard"};
 byte  LEDpins[NBR_EVENTS]    = {D0, D1, D2, D4, D5, D6, D7, D8};
 bool switchPressed[NBR_EVENTS];
@@ -121,6 +121,7 @@ void connectToWifi() {
       Serial.print("Could not connect to server: ");
       Serial.println(host);
       Serial.println("Exiting...");
+      ESP.reset();
     }
   }
   Serial.println("Connected to Google");
@@ -142,7 +143,6 @@ void getCalendar() {
   unsigned long getCalenderEntry = millis();
   while (!client.connected() && millis() < getCalenderEntry + 8000) {
     Serial.print(".");
-    yield();
     client.connect(host, httpsPort);
   }
 
