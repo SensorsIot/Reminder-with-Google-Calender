@@ -36,7 +36,7 @@
 
 #include <ESP8266WiFi.h>
 #include "HTTPSRedirect.h"
-#include <credentials.h>
+//#include <credentials.h>
 
 //Network credentials
 //Google Script ID
