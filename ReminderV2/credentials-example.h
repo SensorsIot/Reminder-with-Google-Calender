@@ -1,4 +1,5 @@
 //Credentials File
+//To use this file rename this to credentials.h
 //Do not commit this file for your security!
 
 //WiFi Credentials
