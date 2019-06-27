@@ -36,7 +36,10 @@
 
 #include <ESP8266WiFi.h>
 #include "HTTPSRedirect.h"
-//#include <credentials.h>
+#if __has_include(<credentials.h>)
+#  include <credentials.h>
+#  define CREDENTIALS
+#endif
 
 
 
