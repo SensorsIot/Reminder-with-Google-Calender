@@ -36,7 +36,7 @@
 
 #include <ESP8266WiFi.h>
 #include "HTTPSRedirect.h"
-//#include <credentials.h>
+#include <credentials.h>
 
 
 
@@ -52,13 +52,13 @@ String url;
 #define UPDATETIME 10000
 
 #ifdef CREDENTIALS
-const char* ssid = mySSID;
+const char*  ssid = mySSID;
 const char* password = myPASSWORD;
 const char *GScriptIdRead = GoogleScriptIdRead;
 const char *GScriptIdWrite = GoogleScriptIdWrite;
 #else
 //Network credentials
-const char* ssid = "............"; //replace with you ssid
+const char*  ssid = "............";
 const char* password = "............"; //replace with your password
 //Google Script ID
 const char *GScriptIdRead = "............"; //replace with you gscript id for reading the calendar
