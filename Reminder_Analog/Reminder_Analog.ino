@@ -14,40 +14,33 @@
   DEALINGS IN THE SOFTWARE.
 
 
-  Based on:
-
-    Google Calendar Integration ESP8266
-    Created by Daniel Willi, 2016
-
-    Based on the WifiClientSecure example by
-    Ivan Grokhotkov
+  Based on the HTTPS library of Sujay Phadke ( https://github.com/electronicsguy/ESP8266/tree/master/HTTPSRedirect )
 
 */
-
-// from LarryD, Arduino forum
-#define DEBUG   //If you comment this line, the DPRINT & DPRINTLN lines are defined as blank.
-#ifdef DEBUG    //Macros are usually in all capital letters.
-#define DPRINT(...)    Serial.print(__VA_ARGS__)     //DPRINT is a macro, debug print
-#define DPRINTLN(...)  Serial.println(__VA_ARGS__)   //DPRINTLN is a macro, debug print with new line
-#else
-#define DPRINT(...)     //now defines a blank line
-#define DPRINTLN(...)   //now defines a blank line
-#endif
 
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
 #include "HTTPSRedirect.h"
-//#include <credentials.h>
+// #include <credentials.h>
+
+/*
+  The credentials.h file at least has to contain:
+  char mySSID[]="your SSID";
+  char myPASSWORD[]="your Password";
+  const char *GScriptIdRead = "............"; //replace with you gscript id for reading the calendar
+  const char *GScriptIdWrite = "..........."; //replace with you gscript id for writing the calendar
+  It has to be placed in the libraries folder
+  If you do not want a credentials file. delete the line: #include <credentials.h>
+*/
 
 Ticker blinker;
 
 //Connection Settings
 const char* host = "script.google.com";
-const char* googleRedirHost = "script.googleusercontent.com";
+// const char* googleRedirHost = "script.googleusercontent.com";
 const int httpsPort = 443;
 
 unsigned long entryCalender, entryPrintStatus, entrySwitchPressed, heartBeatEntry, heartBeatLedEntry;
-String url;
 
 unsigned long intEntry;
 
@@ -77,6 +70,9 @@ unsigned long switchOff = 0;
 boolean beat = false;
 int beatLED = 0;
 
+// echo | openssl s_client -connect script.google.com:443 |& openssl x509 -fingerprint -noout
+const char* fingerprint = "96 38 33 60 D4 6B 84 C9 32 67 49 44 F2 27 D8 7C 33 1A 35 5A";
+
 enum taskStatus {
   none,
   due,
@@ -84,6 +80,7 @@ enum taskStatus {
 };
 
 taskStatus taskStatus[NBR_EVENTS];
+HTTPSRedirect* client = nullptr;
 
 String calendarData = "";
 bool calenderUpToDate;
@@ -104,25 +101,32 @@ void connectToWifi() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  // Use HTTPSRedirect class to create TLS connection
-  HTTPSRedirect client(httpsPort);
+  // Use HTTPSRedirect class to create a new TLS connection
+  client = new HTTPSRedirect(httpsPort);
+  client->setInsecure();
+  client->setPrintResponseBody(true);
+  client->setContentTypeHeader("application/json");
 
   Serial.print("Connecting to ");
   Serial.println(host);
+
+  // Try to connect for a maximum of 5 times
   bool flag = false;
   for (int i = 0; i < 5; i++) {
-    int retval = client.connect(host, httpsPort);
+    int retval = client->connect(host, httpsPort);
     if (retval == 1) {
       flag = true;
       break;
     }
-    else  Serial.println("Connection failed. Retrying...");
-    if (!flag) {
-      Serial.print("Could not connect to server: ");
-      Serial.println(host);
-      Serial.println("Exiting...");
-      ESP.reset();
-    }
+    else
+      Serial.println("Connection failed. Retrying...");
+  }
+
+  if (!flag) {
+    Serial.print("Could not connect to server: ");
+    Serial.println(host);
+    Serial.println("Exiting...");
+    ESP.reset();
   }
   Serial.println("Connected to Google");
 }
@@ -139,16 +143,30 @@ void printStatus() {
 
 void getCalendar() {
   //  Serial.println("Start Request");
-  HTTPSRedirect client(httpsPort);
+  // HTTPSRedirect client(httpsPort);
   unsigned long getCalenderEntry = millis();
-  while (!client.connected() && millis() < getCalenderEntry + 8000) {
-    Serial.print(".");
-    client.connect(host, httpsPort);
-  }
 
+  // Try to connect for a maximum of 5 times
+  bool flag = false;
+  for (int i = 0; i < 5; i++) {
+    int retval = client->connect(host, httpsPort);
+    if (retval == 1) {
+      flag = true;
+      break;
+    }
+    else
+      Serial.println("Connection failed. Retrying...");
+  }
+  if (!flag) {
+    Serial.print("Could not connect to server: ");
+    Serial.println(host);
+    Serial.println("Exiting...");
+    ESP.reset();
+  }
   //Fetch Google Calendar events
-  url = String("/macros/s/") + GScriptIdRead + "/exec";
-  calendarData = client.getData(url, host, googleRedirHost);
+  String url = String("/macros/s/") + GScriptIdRead + "/exec";
+  client->GET(url, host);
+  calendarData = client->getResponseBody();
   Serial.print("Calendar Data---> ");
   Serial.println(calendarData);
   calenderUpToDate = true;
@@ -157,11 +175,27 @@ void getCalendar() {
 
 void createEvent(String title) {
   // Serial.println("Start Write Request");
-  HTTPSRedirect client(httpsPort);
-  if (!client.connected()) client.connect(host, httpsPort);
+
+  // Try to connect for a maximum of 5 times
+  bool flag = false;
+  for (int i = 0; i < 5; i++) {
+    int retval = client->connect(host, httpsPort);
+    if (retval == 1) {
+      flag = true;
+      break;
+    }
+    else
+      Serial.println("Connection failed. Retrying...");
+  }
+  if (!flag) {
+    Serial.print("Could not connect to server: ");
+    Serial.println(host);
+    Serial.println("Exiting...");
+    ESP.reset();
+  }
   // Create event on Google Calendar
-  url = String("/macros/s/") + GScriptIdWrite + "/exec" + "?title=" + title;
-  client.getData(url, host, googleRedirHost);
+  String url = String("/macros/s/") + GScriptIdWrite + "/exec" + "?title=" + title;
+  client->GET(url, host);
   //  Serial.println(url);
   Serial.println("Write Event created ");
   calenderUpToDate = false;
@@ -242,7 +276,8 @@ void handleInterrupt() {
 void setup() {
   Serial.begin(115200);
   blinker.attach_ms(50, handleInterrupt);
-  //   attachInterrupt(digitalPinToInterrupt(switchPins[i]), handleInterrupt, FALLING);
+
+  Serial.println("Reminder_Analog");
   connectToWifi();
   for (int i = 0; i < NBR_EVENTS; i++) {
     pinMode(LEDpins[i], OUTPUT);
@@ -294,6 +329,3 @@ void heartBeat() {
     }
   }
 }
-
-
-

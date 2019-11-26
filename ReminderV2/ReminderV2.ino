@@ -14,30 +14,25 @@
   DEALINGS IN THE SOFTWARE.
 
 
-  Based on:
-
-    Google Calendar Integration ESP8266
-    Created by Daniel Willi, 2016
-
-    Based on the WifiClientSecure example by
-    Ivan Grokhotkov
+  Based on the HTTPS library of Sujay Phadke ( https://github.com/electronicsguy/ESP8266/tree/master/HTTPSRedirect )
 
 */
 
-// from LarryD, Arduino forum
-#define DEBUG   //If you comment this line, the DPRINT & DPRINTLN lines are defined as blank.
-#ifdef DEBUG    //Macros are usually in all capital letters.
-#define DPRINT(...)    Serial.print(__VA_ARGS__)     //DPRINT is a macro, debug print
-#define DPRINTLN(...)  Serial.println(__VA_ARGS__)   //DPRINTLN is a macro, debug print with new line
-#else
-#define DPRINT(...)     //now defines a blank line
-#define DPRINTLN(...)   //now defines a blank line
-#endif
+
 
 #include <ESP8266WiFi.h>
 #include "HTTPSRedirect.h"
-#include <credentials.h>
+// #include <credentials.h>
 
+/*
+  The credentials.h file at least has to contain:
+  char mySSID[]="your SSID";
+  char myPASSWORD[]="your Password";
+  const char *GScriptIdRead = "............"; //replace with you gscript id for reading the calendar
+  const char *GScriptIdWrite = "..........."; //replace with you gscript id for writing the calendar
+  It has to be placed in the libraries folder
+  If you do not want a credentials file. delete the line: #include <credentials.h>
+*/
 
 
 //Connection Settings
@@ -68,9 +63,9 @@ const char *GScriptIdWrite = "..........."; //replace with you gscript id for wr
 #define NBR_EVENTS 4
 
 
-String  possibleEvents[NBR_EVENTS] = {"Meal", "Laundry", "Telephone", "Shop"};
-byte  LEDpins[NBR_EVENTS]    = {D1, D2, D4, D8};
-byte  switchPins[NBR_EVENTS] = {D7, D3, D5, D6};
+String  possibleEvents[NBR_EVENTS] = {"Laundry", "Meal",  "Telephone", "Shop"};
+byte  LEDpins[NBR_EVENTS]    = {D2, D7, D4, D8};  // connect LEDs to these pins or change pin number here
+byte  switchPins[NBR_EVENTS] = {D1, D3, D5, D6};  // connect switches to these pins or change pin number here
 bool switchPressed[NBR_EVENTS];
 boolean beat = false;
 int beatLED = 0;
@@ -82,6 +77,7 @@ enum taskStatus {
 };
 
 taskStatus taskStatus[NBR_EVENTS];
+HTTPSRedirect* client = nullptr;
 
 String calendarData = "";
 bool calenderUpToDate;
@@ -91,25 +87,44 @@ void connectToWifi() {
   Serial.println();
   Serial.print("Connecting to wifi: ");
   Serial.println(ssid);
+
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-
   Serial.println("");
   Serial.print("WiFi connected ");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  // Use HTTPSRedirect class to create TLS connection
-  HTTPSRedirect client(httpsPort);
+  // Use HTTPSRedirect class to create a new TLS connection
+  client = new HTTPSRedirect(httpsPort);
+  client->setInsecure();
+  client->setPrintResponseBody(true);
+  client->setContentTypeHeader("application/json");
 
   Serial.print("Connecting to ");
   Serial.println(host);
+
+  // Try to connect for a maximum of 5 times
   bool flag = false;
-  int retries = 0;
-  while (!client.connect(host, httpsPort)) Serial.print(".");
+  for (int i = 0; i < 5; i++) {
+    int retval = client->connect(host, httpsPort);
+    if (retval == 1) {
+      flag = true;
+      break;
+    }
+    else
+      Serial.println("Connection failed. Retrying...");
+  }
+
+  if (!flag) {
+    Serial.print("Could not connect to server: ");
+    Serial.println(host);
+    Serial.println("Exiting...");
+    ESP.reset();
+  }
   Serial.println("Connected to Google");
 }
 
@@ -124,30 +139,61 @@ void printStatus() {
 }
 
 void getCalendar() {
-  Serial.println("Start Calendar Request");
-  HTTPSRedirect client(httpsPort);
+  //  Serial.println("Start Request");
+  // HTTPSRedirect client(httpsPort);
   unsigned long getCalenderEntry = millis();
-  while (!client.connected() && millis() < getCalenderEntry + 8000) {
-    Serial.print(".");
-    client.connect(host, httpsPort);
-  }
 
+  // Try to connect for a maximum of 5 times
+  bool flag = false;
+  for (int i = 0; i < 5; i++) {
+    int retval = client->connect(host, httpsPort);
+    if (retval == 1) {
+      flag = true;
+      break;
+    }
+    else
+      Serial.println("Connection failed. Retrying...");
+  }
+  if (!flag) {
+    Serial.print("Could not connect to server: ");
+    Serial.println(host);
+    Serial.println("Exiting...");
+    ESP.reset();
+  }
   //Fetch Google Calendar events
-  url = String("/macros/s/") + GScriptIdRead + "/exec";
-  yield();
-  calendarData = client.getData(url, host, googleRedirHost);
+  String url = String("/macros/s/") + GScriptIdRead + "/exec";
+  client->GET(url, host);
+  calendarData = client->getResponseBody();
   Serial.print("Calendar Data---> ");
   Serial.println(calendarData);
   calenderUpToDate = true;
+  yield();
 }
 
 void createEvent(String title) {
   // Serial.println("Start Write Request");
-  HTTPSRedirect client(httpsPort);
-  if (!client.connected()) client.connect(host, httpsPort);
+
+  // Try to connect for a maximum of 5 times
+  bool flag = false;
+  for (int i = 0; i < 5; i++) {
+    int retval = client->connect(host, httpsPort);
+    if (retval == 1) {
+      flag = true;
+      break;
+    }
+    else
+      Serial.println("Connection failed. Retrying...");
+  }
+  if (!flag) {
+    Serial.print("Could not connect to server: ");
+    Serial.println(host);
+    Serial.println("Exiting...");
+    ESP.reset();
+  }
   // Create event on Google Calendar
-  url = String("/macros/s/") + GScriptIdWrite + "/exec" + "?title=" + title;
-  client.getData(url, host, googleRedirHost);
+  String url = String("/macros/s/") + GScriptIdWrite + "/exec" + "?title=" + title;
+  client->GET(url, host);
+  //  Serial.println(url);
   Serial.println("Write Event created ");
   calenderUpToDate = false;
 }
@@ -209,7 +255,7 @@ bool eventHere(int task) {
   }
 }
 
-void handleInterrupt() {
+ICACHE_RAM_ATTR void handleInterrupt() {
   if (millis() > entryInterrupt + 100) {
     entryInterrupt = millis();
     for (int i = 0; i < NBR_EVENTS; i++) {
@@ -222,6 +268,7 @@ void handleInterrupt() {
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Reminder_V2");
   for (int i = 0; i < NBR_EVENTS; i++) {
     pinMode(LEDpins[i], OUTPUT);
     taskStatus[i] = none;  // Reset all LEDs
@@ -273,4 +320,3 @@ void heartBeat() {
     }
   }
 }
-
