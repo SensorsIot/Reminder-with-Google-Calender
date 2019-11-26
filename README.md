@@ -1,6 +1,6 @@
 # Reminder with Google Calender
 
-V1 for compatibility to video https://youtu.be/sm1-l5-z3ag
+V1 for compatibility to video https://youtu.be/sm1-l5-z3ag (probably no more working)
 
 Update Video: https://youtu.be/ZFgh2KFLeGA
 
